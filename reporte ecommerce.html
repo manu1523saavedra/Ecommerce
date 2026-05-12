@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BI Dashboard Ecommerce - Standalone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; }
+        .hidden { display: none !important; }
+        .chart-container { position: relative; width: 100%; height: 100%; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <!-- Navegación -->
+    <nav class="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-50 px-6 flex items-center justify-between shadow-sm">
+        <div class="flex items-center space-x-2">
+            <div class="bg-blue-600 p-1.5 rounded-lg">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+            </div>
+            <span class="font-bold text-slate-800 text-lg tracking-tight">BI Dashboard</span>
+        </div>
+        <div id="nav-tabs" class="hidden flex space-x-6 h-full items-center">
+            <button onclick="switchTab('summary')" id="tab-summary" class="px-2 h-full text-sm font-semibold transition-all tab-active">Resumen</button>
+            <button onclick="switchTab('daily')" id="tab-daily" class="px-2 h-full text-sm font-semibold text-slate-500 transition-all">Seguimiento Diario</button>
+            <button onclick="switchTab('sales')" id="tab-sales" class="px-2 h-full text-sm font-semibold text-slate-500 transition-all">Ventas</button>
+            <button onclick="switchTab('products')" id="tab-products" class="px-2 h-full text-sm font-semibold text-slate-500 transition-all">Productos</button>
+            <div class="flex items-center border-l border-slate-200 ml-4 pl-4 space-x-2">
+                <button onclick="goBack()" class="p-2 text-slate-400 hover:text-blue-600 transition-colors flex items-center space-x-1" title="Volver a pegar datos">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5L6 10l5 5M6 10h12"></path></svg>
+                    <span class="text-xs font-bold uppercase">Volver</span>
+                </button>
+                <button onclick="exportWithData()" class="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Descargar reporte con datos actuales">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Entrada de Datos -->
+    <div id="input-view" class="min-h-screen flex flex-col items-center justify-center p-6 pt-24">
+        <div class="max-w-4xl w-full bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+            <div class="flex items-center space-x-3 mb-6">
+                <div class="bg-blue-600 p-2 rounded-lg text-white font-bold">BI</div>
+                <h1 class="text-2xl font-bold text-slate-900 leading-tight">Analizador Ecommerce Local</h1>
+            </div>
+            <textarea id="data-input" class="w-full h-64 p-4 border border-slate-200 rounded-xl bg-slate-50 font-mono text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Pega aquí tus datos de Excel/Sheets..."></textarea>
+            <div id="error-msg" class="hidden mt-4 p-3 bg-rose-50 text-rose-700 text-sm rounded-lg flex items-center border border-rose-100"></div>
+            <button id="btn-generate" onclick="processData()" class="w-full mt-6 py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg active:scale-95 flex items-center justify-center">
+                Generar
+            </button>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <main id="dashboard-view" class="hidden pt-24 pb-12 px-6 max-w-[1400px] mx-auto space-y-8">
+        
+        <!-- KPIs Globales -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Facturación Total</p>
+                <div id="kpi-revenue" class="text-2xl font-bold text-slate-900">$0</div>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Pedidos Únicos</p>
+                <div id="kpi-orders" class="text-2xl font-bold text-slate-900">0</div>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Ticket Promedio</p>
+                <div id="kpi-aov" class="text-2xl font-bold text-slate-900">$0</div>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Meses Analizados</p>
+                <div id="kpi-months" class="text-2xl font-bold text-slate-900">0</div>
+            </div>
+        </div>
+
+        <!-- Section: Summary -->
+        <div id="tab-content-summary" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-800 mb-6 text-sm uppercase">Evolución Facturación Mensual</h3>
+                <div class="h-[400px] chart-container">
+                    <canvas id="chart-monthly"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 p-8 rounded-2xl text-white shadow-xl flex flex-col">
+                <h3 class="text-lg font-bold mb-6 flex items-center text-blue-400 italic">Resumen por Mes</h3>
+                <div id="monthly-list" class="space-y-4 flex-1 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <!-- Section: Seguimiento Diario -->
+        <div id="tab-content-daily" class="hidden space-y-8 animate-in fade-in">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Venta -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-blue-600">
+                    <p class="text-slate-500 text-[10px] font-bold uppercase mb-1">Ventas Mes Actual</p>
+                    <div id="daily-kpi-rev" class="text-2xl font-bold text-slate-900">$0</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <div id="daily-kpi-rev-prev" class="text-[10px] text-slate-400 font-medium">Prev: $0</div>
+                        <div id="daily-kpi-rev-comp" class="text-[10px] font-bold"></div>
+                    </div>
+                </div>
+                <!-- Pedidos -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-600">
+                    <p class="text-slate-500 text-[10px] font-bold uppercase mb-1">Pedidos Mes Actual</p>
+                    <div id="daily-kpi-orders" class="text-2xl font-bold text-slate-900">0</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <div id="daily-kpi-orders-prev" class="text-[10px] text-slate-400 font-medium">Prev: 0</div>
+                        <div id="daily-kpi-orders-comp" class="text-[10px] font-bold"></div>
+                    </div>
+                </div>
+                <!-- AOV -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-amber-600">
+                    <p class="text-slate-500 text-[10px] font-bold uppercase mb-1">AOV Mes Actual</p>
+                    <div id="daily-kpi-aov" class="text-2xl font-bold text-slate-900">$0</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <div id="daily-kpi-aov-prev" class="text-[10px] text-slate-400 font-medium">Prev: $0</div>
+                        <div id="daily-kpi-aov-comp" class="text-[10px] font-bold"></div>
+                    </div>
+                </div>
+                <!-- Promedio Diario -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-indigo-600">
+                    <p class="text-slate-500 text-[10px] font-bold uppercase mb-1">Pedidos Diarios Prom.</p>
+                    <div id="daily-kpi-avg" class="text-2xl font-bold text-slate-900">0.0</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <div id="daily-kpi-avg-prev" class="text-[10px] text-slate-400 font-medium">Prev: 0.0</div>
+                        <div id="daily-kpi-avg-comp" class="text-[10px] font-bold"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 id="daily-chart-title" class="font-bold text-slate-800 text-sm">Evolución Diaria</h3>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center text-[10px] text-slate-400 font-bold uppercase">
+                            <span class="w-2.5 h-2.5 bg-blue-600 rounded-full mr-2"></span> Mes Actual
+                        </div>
+                        <div class="flex items-center text-[10px] text-slate-400 font-bold uppercase">
+                            <span class="w-2.5 h-2.5 bg-slate-300 rounded-full mr-2"></span> Mes Anterior
+                        </div>
+                    </div>
+                </div>
+                <div class="h-[450px] chart-container">
+                    <canvas id="chart-daily"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-content-sales" class="hidden bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <table class="w-full text-left">
+                <thead class="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    <tr>
+                        <th class="px-6 py-4">Mes</th>
+                        <th class="px-6 py-4 text-right">Facturación</th>
+                        <th class="px-6 py-4 text-right">Pedidos Únicos</th>
+                        <th class="px-6 py-4 text-center">Crecimiento</th>
+                    </tr>
+                </thead>
+                <tbody id="table-sales-body" class="divide-y divide-slate-100 text-sm"></tbody>
+            </table>
+        </div>
+
+        <div id="tab-content-products" class="hidden bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="font-bold text-slate-800 mb-6 text-sm uppercase">Ranking de Productos</h3>
+            <div class="h-[600px] chart-container">
+                <canvas id="chart-products"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        Chart.register(ChartDataLabels);
+        let processedData = null;
+        let activeCharts = { monthly: null, daily: null, products: null };
+
+        const formatCurrency = (val) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(val || 0);
+        
+        const formatCompact = (val) => {
+            if (val >= 1000000) return (val / 1000000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'M';
+            if (val >= 1000) return (val / 1000).toFixed(0) + 'k';
+            return Math.round(val).toString();
+        };
+
+        window.onload = function() {
+            const savedData = localStorage.getItem('bi_dashboard_data');
+            if (savedData) {
+                document.getElementById('data-input').value = savedData;
+                setTimeout(() => processData(true), 100);
+            }
+        };
+
+        function switchTab(tab) {
+            ['summary', 'daily', 'sales', 'products'].forEach(t => {
+                const content = document.getElementById(`tab-content-${t}`);
+                const btn = document.getElementById(`tab-${t}`);
+                if (content && btn) {
+                    content.classList.toggle('hidden', t !== tab);
+                    btn.classList.toggle('tab-active', t === tab);
+                    btn.classList.toggle('text-slate-500', t !== tab);
+                }
+            });
+            setTimeout(() => {
+                Object.values(activeCharts).forEach(c => c && c.resize());
+            }, 50);
+        }
+
+        function goBack() {
+            document.getElementById('input-view').classList.remove('hidden');
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('nav-tabs').classList.add('hidden');
+        }
+
+        function exportWithData() {
+            const currentData = document.getElementById('data-input').value;
+            if (!currentData.trim()) {
+                alert("Primero debes cargar datos para poder exportarlos.");
+                return;
+            }
+            
+            let htmlContent = document.documentElement.outerHTML;
+            const dataToEmbed = currentData.replace(/<\/textarea>/g, '&lt;/textarea&gt;');
+            
+            const regex = /<textarea id="data-input"[^>]*>([\s\S]*?)<\/textarea>/;
+            htmlContent = htmlContent.replace(regex, `<textarea id="data-input" class="w-full h-64 p-4 border border-slate-200 rounded-xl bg-slate-50 font-mono text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Pega aquí tus datos de Excel/Sheets...">${dataToEmbed}</textarea>`);
+            
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Reporte_Ecommerce_${new Date().toISOString().slice(0,10)}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function robustSplit(str, delimiter) {
+            const arr = [];
+            let quote = false, col = "";
+            for (let c = 0; c < str.length; c++) {
+                let char = str[c];
+                if (char === '"') quote = !quote;
+                else if (char === delimiter && !quote) {
+                    arr.push(col.trim());
+                    col = "";
+                } else col += char;
+            }
+            arr.push(col.trim());
+            return arr;
+        }
+
+        function processData(isAuto = false) {
+            const text = document.getElementById('data-input').value;
+            const errorDiv = document.getElementById('error-msg');
+            if (!text.trim()) return;
+            
+            localStorage.setItem('bi_dashboard_data', text);
+
+            try {
+                errorDiv.classList.add('hidden');
+                const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                if (lines.length < 2) throw new Error("Datos insuficientes.");
+
+                const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') ? ';' : ',');
+                const headers = robustSplit(lines[0], delimiter).map(h => h.toLowerCase());
+                
+                const dateIdx = headers.findIndex(h => h.includes('creation date') || h.includes('fecha'));
+                const amountIdx = headers.findIndex(h => h.includes('sku total pric') || h.includes('monto') || h.includes('total value'));
+                const skuIdx = headers.findIndex(h => h.includes('sku name') || h.includes('producto'));
+                const orderIdx = headers.findIndex(h => h.includes('order') || h.includes('nro pedido'));
+
+                if (dateIdx === -1 || amountIdx === -1) throw new Error("No se detectaron columnas críticas (Fecha o Monto).");
+
+                const cleanData = lines.slice(1).map(line => {
+                    const row = robustSplit(line, delimiter);
+                    if (row.length < headers.length) return null;
+                    
+                    const date = new Date(row[dateIdx]);
+                    let amt = String(row[amountIdx] || "0").replace(/[^\d,.-]/g, "");
+                    if (amt.includes(',') && amt.includes('.')) amt = amt.replace(/\./g, '').replace(',', '.');
+                    else if (amt.includes(',')) amt = amt.replace(',', '.');
+                    
+                    return {
+                        date: isNaN(date.getTime()) ? null : date,
+                        amount: parseFloat(amt) || 0,
+                        sku: (row[skuIdx] || 'S/D').trim(),
+                        order: (row[orderIdx] || Math.random().toString()).trim()
+                    };
+                }).filter(r => r !== null && r.date !== null);
+
+                if (cleanData.length === 0) throw new Error("No hay registros válidos para procesar.");
+                cleanData.sort((a, b) => a.date - b.date);
+
+                const monthly = {};
+                const skuStats = {};
+                const globalOrders = new Set();
+                
+                const latestDate = cleanData[cleanData.length - 1].date;
+                const latestMonth = latestDate.getMonth();
+                const latestYear = latestDate.getFullYear();
+                const prevMDate = new Date(latestYear, latestMonth - 1, 1);
+                const prevMonth = prevMDate.getMonth();
+                const prevYear = prevMDate.getFullYear();
+
+                const dailyGroups = {};
+                const prevDailyGroups = {};
+                const daysCurSet = new Set(), daysPrevSet = new Set();
+
+                cleanData.forEach(r => {
+                    const mIdx = r.date.getMonth(), year = r.date.getFullYear();
+                    const mKey = `${year}-${String(mIdx + 1).padStart(2, '0')}`;
+                    if (!monthly[mKey]) {
+                        monthly[mKey] = { label: r.date.toLocaleString('es-ES', { month: 'short', year: '2-digit' }), total: 0, orders: new Set(), month: mIdx, year: year };
+                    }
+                    monthly[mKey].total += r.amount;
+                    monthly[mKey].orders.add(r.order);
+                    globalOrders.add(r.order);
+
+                    if (!skuStats[r.sku]) skuStats[r.sku] = { sku: r.sku, total: 0 };
+                    skuStats[r.sku].total += r.amount;
+
+                    const d = r.date.getDate();
+                    if (mIdx === latestMonth && year === latestYear) {
+                        daysCurSet.add(d);
+                        if (!dailyGroups[d]) dailyGroups[d] = { revenue: 0, orders: new Set() };
+                        dailyGroups[d].revenue += r.amount;
+                        dailyGroups[d].orders.add(r.order);
+                    } else if (mIdx === prevMonth && year === prevYear) {
+                        daysPrevSet.add(d);
+                        if (!prevDailyGroups[d]) prevDailyGroups[d] = { revenue: 0, orders: new Set() };
+                        prevDailyGroups[d].revenue += r.amount;
+                        prevDailyGroups[d].orders.add(r.order);
+                    }
+                });
+
+                const monthlyArray = Object.keys(monthly).sort().map(k => ({ ...monthly[k], ordersCount: monthly[k].orders.size }));
+                monthlyArray.forEach((m, i) => { if (i > 0) m.growth = monthlyArray[i-1].total !== 0 ? ((m.total - monthlyArray[i-1].total) / monthlyArray[i-1].total) * 100 : 0; });
+
+                const curM = monthlyArray.find(m => m.month === latestMonth && m.year === latestYear);
+                const prevM = monthlyArray.find(m => m.month === prevMonth && m.year === prevYear);
+                const getComp = (cur, prev) => { 
+                    if (!prev || prev === 0) return { val: 0, label: '--' }; 
+                    const diff = ((cur - prev) / prev) * 100; 
+                    return { val: diff, label: `${diff >= 0 ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}%` }; 
+                };
+
+                const dailyData = [];
+                for (let d = 1; d <= 31; d++) dailyData.push({ day: d, revenue: dailyGroups[d] ? dailyGroups[d].revenue : 0, prevRevenue: prevDailyGroups[d] ? prevDailyGroups[d].revenue : 0 });
+
+                const dCur = daysCurSet.size || 1, dPrev = daysPrevSet.size || 1;
+                processedData = { 
+                    monthly: monthlyArray, daily: dailyData, currentMonthName: latestDate.toLocaleString('es-ES', { month: 'long' }), 
+                    products: Object.values(skuStats).sort((a, b) => b.total - a.total).slice(0, 10), 
+                    comparison: { revenue: getComp(curM?.total || 0, prevM?.total || 0), orders: getComp(curM?.ordersCount || 0, prevM?.ordersCount || 0), aov: getComp((curM?.total || 0) / (curM?.ordersCount || 1), (prevM?.total || 0) / (prevM?.ordersCount || 1)), avg: getComp((curM?.ordersCount || 0) / dCur, (prevM?.ordersCount || 0) / dPrev) }, 
+                    currentM: curM, prevM: prevM, avgCur: (curM?.ordersCount || 0) / dCur, avgPrev: (prevM?.ordersCount || 0) / dPrev, 
+                    summary: { revenue: cleanData.reduce((acc, r) => acc + r.amount, 0), orders: globalOrders.size } 
+                };
+                renderDashboard();
+            } catch (err) { 
+                errorDiv.innerText = err.message; errorDiv.classList.remove('hidden'); 
+            }
+        }
+
+        function renderDashboard() {
+            document.getElementById('input-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+            document.getElementById('nav-tabs').classList.remove('hidden');
+
+            document.getElementById('kpi-revenue').innerText = formatCurrency(processedData.summary.revenue);
+            document.getElementById('kpi-orders').innerText = processedData.summary.orders;
+            document.getElementById('kpi-aov').innerText = formatCurrency(processedData.summary.revenue / (processedData.summary.orders || 1));
+            document.getElementById('kpi-months').innerText = processedData.monthly.length;
+
+            document.getElementById('daily-kpi-rev').innerText = formatCurrency(processedData.currentM?.total || 0);
+            document.getElementById('daily-kpi-rev-prev').innerText = `Prev: ${formatCurrency(processedData.prevM?.total || 0)}`;
+            document.getElementById('daily-kpi-orders').innerText = processedData.currentM?.ordersCount || 0;
+            document.getElementById('daily-kpi-orders-prev').innerText = `Prev: ${processedData.prevM?.ordersCount || 0}`;
+            document.getElementById('daily-kpi-aov').innerText = formatCurrency((processedData.currentM?.total || 0) / (processedData.currentM?.ordersCount || 1));
+            document.getElementById('daily-kpi-aov-prev').innerText = `Prev: ${formatCurrency((processedData.prevM?.total || 0) / (processedData.prevM?.ordersCount || 1))}`;
+            document.getElementById('daily-kpi-avg').innerText = (processedData.avgCur || 0).toFixed(1);
+            document.getElementById('daily-kpi-avg-prev').innerText = `Prev: ${(processedData.avgPrev || 0).toFixed(1)}`;
+            
+            const renderComp = (id, data) => { const el = document.getElementById(id); if(el){ el.innerText = data.label; el.className = `text-[10px] font-bold ${data.val >= 0 ? 'text-emerald-500' : 'text-rose-500'}`;} };
+            renderComp('daily-kpi-rev-comp', processedData.comparison.revenue);
+            renderComp('daily-kpi-orders-comp', processedData.comparison.orders);
+            renderComp('daily-kpi-aov-comp', processedData.comparison.aov);
+            renderComp('daily-kpi-avg-comp', processedData.comparison.avg);
+
+            document.getElementById('daily-chart-title').innerText = `Evolución Diaria: ${processedData.currentMonthName}`;
+            document.getElementById('monthly-list').innerHTML = processedData.monthly.map(m => `<div class="flex justify-between items-center border-b border-slate-800 pb-2"><span class="text-slate-400 text-xs font-medium">${m.label}</span><span class="font-bold text-blue-400 text-sm">${m.ordersCount} pedidos</span></div>`).join('');
+            document.getElementById('table-sales-body').innerHTML = processedData.monthly.map(m => `<tr class="hover:bg-slate-50 transition-colors"><td class="px-6 py-4 font-semibold text-slate-700">${m.label}</td><td class="px-6 py-4 text-right font-medium">${formatCurrency(m.total)}</td><td class="px-6 py-4 text-right font-bold">${m.ordersCount}</td><td class="px-6 py-4 text-center font-bold ${m.growth >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${m.growth >= 0 ? '▲' : '▼'} ${Math.abs(m.growth).toFixed(1)}%</td></tr>`).join('');
+
+            renderCharts();
+        }
+
+        function renderCharts() {
+            Object.values(activeCharts).forEach(c => c && c.destroy());
+
+            // Monthly
+            const ctxM = document.getElementById('chart-monthly').getContext('2d');
+            activeCharts.monthly = new Chart(ctxM, { 
+                type: 'line', 
+                data: { labels: processedData.monthly.map(m => m.label), datasets: [{ data: processedData.monthly.map(m => m.total), borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.4, borderWidth: 3 }] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'top', formatter: (v) => '$' + formatCompact(v), font: { weight: 'bold', size: 10 } } }, scales: { y: { display: false }, x: { grid: { display: false } } } } 
+            });
+
+            // Daily
+            const ctxD = document.getElementById('chart-daily').getContext('2d');
+            activeCharts.daily = new Chart(ctxD, { 
+                type: 'bar', 
+                data: { labels: processedData.daily.map(d => d.day), datasets: [{ label: 'Mes Actual', data: processedData.daily.map(d => d.revenue), backgroundColor: '#2563eb', borderRadius: 4, datalabels: { display: true, anchor: 'end', align: 'top', formatter: (v) => v > 0 ? formatCompact(v) : '', font: { weight: 'bold', size: 9 } } }, { label: 'Mes Anterior', data: processedData.daily.map(d => d.prevRevenue), backgroundColor: '#cbd5e1', borderRadius: 4, datalabels: { display: false } }] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCompact(v), font: { size: 10 } } }, x: { grid: { display: false } } } } 
+            });
+
+            // Products
+            const ctxP = document.getElementById('chart-products').getContext('2d');
+            activeCharts.products = new Chart(ctxP, { 
+                type: 'bar', 
+                data: { labels: processedData.products.map(p => p.sku), datasets: [{ data: processedData.products.map(p => p.total), backgroundColor: '#2563eb', borderRadius: 4 }] }, 
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'right', formatter: (v) => formatCurrency(v), font: { weight: 'bold', size: 9 } } }, scales: { x: { display: false }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } } 
+            });
+        }
+    </script>
+</body>
+</html>
